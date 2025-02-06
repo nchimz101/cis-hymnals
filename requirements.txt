@@ -5,3 +5,6 @@ fastapi
 pydantic
 uvicorn
 streamlit
+
+Flask
+Flask-Cors
