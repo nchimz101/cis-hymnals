@@ -1,0 +1,7 @@
+fastapi
+pydantic
+beautifulsoup4
+fastapi
+pydantic
+uvicorn
+streamlit
