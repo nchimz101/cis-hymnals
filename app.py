@@ -1,59 +1,87 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
-from typing import List, Dict
+from typing import List, Optional, Dict
 import json
 import os
 
-# Initialize FastAPI app
-app = FastAPI()
+app = FastAPI(
+    title="Multilingual Hymnal API",
+    description="API for accessing hymnal collections",
+    version="1.0.0"
+)
 
-# Get the project directory
+# Load configuration
 directory = os.getcwd()
-
-# Load config.json
 config_path = os.path.join(directory, "config.json")
 with open(config_path, "r", encoding="utf-8") as config_file:
     config = json.load(config_file)
 
-# Map keys to language titles
-language_map = {item["key"]: item["title"] for item in config}
+
+class LanguageConfig(BaseModel):
+    key: str
+    title: str
+    language: str
+
+
+class HymnDetails(BaseModel):
+    number: int
+    title: str
+    content: str
+
 
 def load_hymnals():
     hymnals = {}
+
     for filename in os.listdir(directory):
         if filename.endswith(".json") and filename != "config.json":
-            language = filename.split(".")[0]
+            language_key = filename.split(".")[0]
             with open(os.path.join(directory, filename), "r", encoding="utf-8") as file:
-                hymnals[language] = json.load(file)
+                hymnals[language_key] = json.load(file)
+
     return hymnals
+
 
 hymnals = load_hymnals()
 
-class Hymnal(BaseModel):
-    title: str
-    number: int
-    content: str
 
-@app.get("/languages", response_model=List[str])
+@app.get("/languages", response_model=List[LanguageConfig])
 def get_languages():
-    """Returns a list of available hymnals."""
-    return list(language_map.keys())
+    """Returns available hymnal languages from config."""
+    return config
 
-@app.get("/hymnals/{language}", response_model=List[Hymnal])
-def get_hymnals(language: str):
-    """Fetch all hymns of a specific language."""
-    if language not in hymnals:
-        raise HTTPException(status_code=404, detail="Language not found")
-    return hymnals[language]
 
-@app.get("/hymnals/{language}/{number}", response_model=Hymnal)
-def get_hymn(language: str, number: int):
-    """Retrieve a specific hymn by its number."""
-    if language not in hymnals:
+@app.get("/hymnals/{language_key}", response_model=List[HymnDetails])
+def get_hymnals(
+        language_key: str,
+        min_number: Optional[int] = Query(None),
+        max_number: Optional[int] = Query(None)
+):
+    """Retrieve hymns for a specific language."""
+    if language_key not in hymnals:
         raise HTTPException(status_code=404, detail="Language not found")
-    hymn = next((hymn for hymn in hymnals[language] if hymn["number"] == number), None)
+
+    filtered_hymnals = hymnals[language_key]
+
+    if min_number is not None:
+        filtered_hymnals = [h for h in filtered_hymnals if h['number'] >= min_number]
+
+    if max_number is not None:
+        filtered_hymnals = [h for h in filtered_hymnals if h['number'] <= max_number]
+
+    return filtered_hymnals
+
+
+@app.get("/hymnals/{language_key}/{number}", response_model=HymnDetails)
+def get_hymn(language_key: str, number: int):
+    """Retrieve a specific hymn by language and number."""
+    if language_key not in hymnals:
+        raise HTTPException(status_code=404, detail="Language not found")
+
+    hymn = next((h for h in hymnals[language_key] if h['number'] == number), None)
+
     if not hymn:
         raise HTTPException(status_code=404, detail="Hymn not found")
+
     return hymn
 
 # Deployment Instructions:
